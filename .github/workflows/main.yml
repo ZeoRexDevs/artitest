@@ -1,0 +1,73 @@
+name: Art Test
+
+on:
+  workflow_dispatch:
+
+env:
+  ScrHash: "18244deb3512b8dea35b12a0867cdf5f"
+
+jobs:
+  one:
+    runs-on: ubuntu-22.04
+
+    outputs:
+      latestRevision: ${{ steps.set-params.outputs.latestRevision }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: 'main'
+      - name: Prepare files
+        id: set-params
+        run: |
+          # Get GIST latest Revision number
+          export latestRevision=$(curl -sL "https://gist.github.com/rokibhasansagar/${ScrHash}/" | grep "/artifact\.test\.sh" | awk -F'/raw/' '{print $2}' | awk -F'/' '{print $1}')
+          echo "latestRevision=${latestRevision}" >> $GITHUB_OUTPUT
+          # Generate Workflow Matrix
+          curl -sL "https://gist.github.com/rokibhasansagar/${ScrHash}/raw/${latestRevision}/artifact.test.sh" -O
+          source ./artifact.test.sh
+      - name: Upload Source Media as Artifact
+        uses: actions/upload-artifact@v3
+        if: env.artnum == 1
+        continue-on-error: true
+        with:
+          path: ~/data/media.mkv
+          retention-days: 1
+      - name: Upload Source Media Split 1/2-3 as Artifact
+        uses: actions/upload-artifact@v3
+        if: ( env.artnum == '2' || env.artnum == '3' )
+        with:
+          path: ~/data/media.mkv.00
+          retention-days: 1
+      - name: Upload Source Media Split 2/2-3 as Artifact
+        uses: actions/upload-artifact@v3
+        if: ( env.artnum == '2' || env.artnum == '3' )
+        with:
+          path: ~/data/media.mkv.01
+          retention-days: 1
+      - name: Upload Source Media Split 3/3 as Artifact
+        uses: actions/upload-artifact@v3
+        if: env.artnum == '3'
+        with:
+          path: ~/data/media.mkv.02
+          retention-days: 1
+
+  two:
+    runs-on: ubuntu-22.04
+    needs: one
+    
+    env:
+      latestRevision: ${{ needs.one.outputs.latestRevision }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: 'main'
+      - name: Download Source Media from Artifact
+        uses: actions/download-artifact@v3
+        with:
+          path: ~/data/
+      - name: Check files
+        run: |
+          curl -sL "https://gist.github.com/rokibhasansagar/${ScrHash}/raw/${latestRevision}/after.test.sh" -O
+          source ./after.test.sh
