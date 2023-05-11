@@ -31,25 +31,25 @@ jobs:
         if: env.artnum == 1
         continue-on-error: true
         with:
-          path: ~/data/media.mkv
+          path: ~/data/Miraculous.Tales.of.Ladybug.and.Cat.Noir.S01E01.1080p.Netflix.WEB-DL.x264-TrollHD.mkv
           retention-days: 1
       - name: Upload Source Media Split 1/2-3 as Artifact
         uses: actions/upload-artifact@v3
         if: ( env.artnum == '2' || env.artnum == '3' )
         with:
-          path: ~/data/media.mkv.00
+          path: ~/data/Miraculous.Tales.of.Ladybug.and.Cat.Noir.S01E01.1080p.Netflix.WEB-DL.x264-TrollHD.mkv.00
           retention-days: 1
       - name: Upload Source Media Split 2/2-3 as Artifact
         uses: actions/upload-artifact@v3
         if: ( env.artnum == '2' || env.artnum == '3' )
         with:
-          path: ~/data/media.mkv.01
+          path: ~/data/Miraculous.Tales.of.Ladybug.and.Cat.Noir.S01E01.1080p.Netflix.WEB-DL.x264-TrollHD.mkv.01
           retention-days: 1
       - name: Upload Source Media Split 3/3 as Artifact
         uses: actions/upload-artifact@v3
         if: env.artnum == '3'
         with:
-          path: ~/data/media.mkv.02
+          path: ~/data/Miraculous.Tales.of.Ladybug.and.Cat.Noir.S01E01.1080p.Netflix.WEB-DL.x264-TrollHD.mkv.02
           retention-days: 1
 
   two:
