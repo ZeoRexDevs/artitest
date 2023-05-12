@@ -18,17 +18,24 @@ jobs:
   one:
     if: ${{ github.event.inputs.buildOnly != 'true' }}
     runs-on: ubuntu-22.04
+    outputs:
+      latestRevision: ${{ steps.set-params.outputs.latestRevision }}
     steps:
       - uses: actions/checkout@v3
         with:
           ref: 'main'
       - name: Echo
+        id: set-params
         run: |
           echo -e "This is Job One"
+          echo "latestRevision=main" >>$GITHUB_OUTPUTS
 
   two:
     runs-on: ubuntu-22.04
+    if: ( github.event.inputs.buildOnly == 'true' && !cancelled() ) || success()
     needs: one
+    env:
+      latestRevision: ${{ needs.one.outputs.latestRevision }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -36,6 +43,7 @@ jobs:
       - name: Echo
         run: |
           echo -e "This is Job Two"
+          echo -e "latestRevision was ${latestRevision}"
 
   three:
     runs-on: ubuntu-22.04
