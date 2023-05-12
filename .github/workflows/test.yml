@@ -1,0 +1,61 @@
+name: DepCheck
+
+on:
+  workflow_dispatch:
+    inputs:
+      doRelease:
+        description: 'Release'
+        type: boolean
+        default: false
+        required: false
+      buildOnly:
+        description: 'Only build'
+        type: boolean
+        default: false
+        required: false
+
+jobs:
+  one:
+    if: ${{ github.event.inputs.buildOnly != 'true' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: 'main'
+      - name: Echo
+        run: |
+          echo -e "This is Job One"
+
+  two:
+    runs-on: ubuntu-22.04
+    needs: one
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: 'main'
+      - name: Echo
+        run: |
+          echo -e "This is Job Two"
+
+  three:
+    runs-on: ubuntu-22.04
+    needs: [one, two]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: 'main'
+      - name: Echo
+        run: |
+          echo -e "This is Job Three"
+
+  four:
+    runs-on: ubuntu-22.04
+    if: github.event.inputs.doRelease == 'true' && needs.two.result == 'success'
+    needs: two
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: 'main'
+      - name: Echo
+        run: |
+          echo -e "This is Job Four"
