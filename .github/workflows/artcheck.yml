@@ -1,0 +1,185 @@
+name: ArtCheck
+
+on:
+  workflow_dispatch:
+
+env:
+  RCLONE_CONFIG_HASH: ${{ secrets.RCLONE_CONFIG_HASH }}
+
+jobs:
+  one:
+    name: "Matrix Preparation"
+    runs-on: ubuntu-22.04
+    outputs:
+      SourceName: ${{ steps.set-matrix.outputs.SourceName }}
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      artvar: ${{ steps.set-artvar.outputs.artvar }}
+      artchunk: ${{ steps.set-artmatrix.outputs.artchunk }}
+      artmatrix: ${{ steps.set-artmatrix.outputs.artmatrix }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: 'main'
+      - name: Matrix Gen Only
+        id: set-matrix
+        run: |
+          echo "SourceName=Miraculous.Tales.of.Ladybug.and.Cat.Noir.S04E01.1080p.mkv" >>$GITHUB_ENV
+          echo "SourceName=Miraculous.Tales.of.Ladybug.and.Cat.Noir.S04E01.1080p.mkv" >>$GITHUB_OUTPUT
+          export matrix=[$(for i in $(seq -w 11); do printf \""%s\"\n" "${i}"; done | paste -sd, -)]
+          echo "matrix=${matrix}" >>$GITHUB_OUTPUT
+          printf "[i] The Build Matrix: \n%s\n" "${matrix}"
+      - name: Artifact Download Check
+        continue-on-error: true
+        uses: actions/download-artifact@v3
+        with:
+          path: ~/data/
+      - name: Artifact Availability Check
+        id: set-artvar
+        run: |
+          ls ~/data/artifact/*.mkv* 2>/dev/null >/tmp/art.txt || true
+          if [[ -s /tmp/art.txt ]]; then
+            echo -e "[+] Artifact Found"
+            echo "artvar=found" >>$GITHUB_OUTPUT
+            echo "artvar=found" >>$GITHUB_ENV
+          else
+            echo -e "[-] Artifact Not Found"
+            echo "artvar=404" >>$GITHUB_OUTPUT
+            echo "artvar=404" >>$GITHUB_ENV
+          fi
+      - name: Get artchunk and artmatrix
+        id: set-artmatrix
+        if: env.artvar == '404'
+        run: |
+          curl -sL "https://gist.github.com/rokibhasansagar/89f2a399e2faf513b4b21a9b7219caa4/raw/c8f070e60c9a2ee75d6eb6be8d09e9a0ae6c4107/setup.rclone.plus.configs.sh" | bash
+          export SizeInByte=$(rclone size --json --max-depth=1 "tdz3:/TorrentXbot/Miraculous.Tales.of.Ladybug.and.Cat.Noir.S04.DUBBED.COMPLETE.1080p.HULU.WEBRip.DDP5.1.x264-LADYBUG[rartv]/Miraculous.Tales.of.Ladybug.and.Cat.Noir.S04E01.Truth.REPACK.1080p.HULU.WEB-DL.DD5.1.H.264-LADYBUG.mkv" 2>/dev/null | jq .bytes)
+          export artchunk="$((SizeInByte/1024/1024/256))"
+          [[ ${artchunk} -eq 0 ]] && export artchunk="1"
+          [[ ${artchunk} -gt 20 ]] && export artchunk="20"
+          echo "artchunk=${artchunk}" >>$GITHUB_OUTPUT
+          export artmatrix=[$(for i in $(seq -w 00 $((artchunk-1))); do printf \""%s\"\n" "${i}"; done | paste -sd, -)]
+          echo "artmatrix=${artmatrix}" >>$GITHUB_OUTPUT
+          printf "[i] The Artifact Upload Matrix: \n%s\n" "${artmatrix}"
+
+  two:
+    name: "Artifact Preparation"
+    runs-on: ubuntu-22.04
+    if: needs.one.outputs.artvar == '404' && needs.one.outputs.artmatrix != ''
+    needs: one
+
+    strategy:
+      fail-fast: true
+      max-parallel: 5
+      matrix:
+        artnum: ${{fromJson(needs.one.outputs.artmatrix)}}
+
+    env:
+      artnum: ${{ matrix.artnum }}
+      artchunk: ${{ needs.one.outputs.artchunk }}
+      SourceName: ${{ needs.one.outputs.SourceName }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: 'main'
+      - name: Download Media and Split into Parts
+        run: |
+          mkdir -p ~/data && cd ~/data
+          echo -e "[i] Downloading File"
+          wget -q "https://gdrivecdn.fr3akyphantom.workers.dev/3:/TorrentXbot/Miraculous.Tales.of.Ladybug.and.Cat.Noir.S04.DUBBED.COMPLETE.1080p.HULU.WEBRip.DDP5.1.x264-LADYBUG%5Brartv%5D/Miraculous.Tales.of.Ladybug.and.Cat.Noir.S04E01.Truth.REPACK.1080p.HULU.WEB-DL.DD5.1.H.264-LADYBUG.mkv"
+          mv *.mkv ${SourceName}
+          mediainfo ${SourceName}
+          md5sum ${SourceName}
+          echo -e "[i] Splitting Media"
+          split -n ${artchunk} -d ${SourceName} ${SourceName}.
+      - name: Upload Specific Media Part as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          path: ~/data/${{env.SourceName}}.${{env.artnum}}
+          retention-days: 5
+
+  three-v1:
+    name: "Job Processing:RE"
+    runs-on: ubuntu-22.04
+    if: needs.one.outputs.artvar == 'found'
+    needs: [one]
+
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        split: ${{fromJson(needs.one.outputs.matrix)}}
+
+    env:
+      split: ${{ matrix.split }}
+      artchunk: ${{ needs.one.outputs.artchunk }}
+      SourceName: ${{ needs.one.outputs.SourceName }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: 'main'
+      - name: Download Source Media from Artifact
+        uses: actions/download-artifact@v3
+        with:
+          path: ~/data/
+      - name: Check files in Job \#${{ env.split }} out of ${{ env.artchunk }} parts
+        run: |
+          cd ~/data
+          tree -a -h -L 2
+          echo -e "[+] Merge/Copy the artifact(s) in place"
+          echo "\$ cat ./artifact/${SourceName}.* >${SourceName}"
+          cat ./artifact/${SourceName}.* >${SourceName}
+          rm -rf ./artifact/
+          mediainfo ${SourceName}
+          md5sum ${SourceName}
+
+  three-v2:
+    name: "Job Processing"
+    runs-on: ubuntu-22.04
+    if: needs.one.outputs.artvar == '404'
+    needs: [one,two]
+
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        split: ${{fromJson(needs.one.outputs.matrix)}}
+
+    env:
+      split: ${{ matrix.split }}
+      artchunk: ${{ needs.one.outputs.artchunk }}
+      SourceName: ${{ needs.one.outputs.SourceName }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: 'main'
+      - name: Download Source Media from Artifact
+        uses: actions/download-artifact@v3
+        with:
+          path: ~/data/
+      - name: Check files in Job \#${{ env.split }} out of ${{ env.artchunk }} parts
+        run: |
+          cd ~/data
+          tree -a -h -L 2
+          echo -e "[+] Merge/Copy the artifact(s) in place"
+          echo "\$ cat ./artifact/${SourceName}.* >${SourceName}"
+          cat ./artifact/${SourceName}.* >${SourceName}
+          rm -rf ./artifact/
+          mediainfo ${SourceName}
+          md5sum ${SourceName}
+
+  four:
+    name: "Job Finalizing"
+    runs-on: ubuntu-22.04
+    if: ( needs.three-v1.result == 'success' || needs.three-v2.result == 'success' ) && ( !cancelled() || success() )
+    needs: [one, three-v1, three-v2]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: 'main'
+      - name: Final Step
+        run: |
+          echo -e "[i] Job Success"
