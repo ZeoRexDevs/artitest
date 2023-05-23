@@ -53,7 +53,7 @@ jobs:
         run: |
           curl -sL "https://gist.github.com/rokibhasansagar/89f2a399e2faf513b4b21a9b7219caa4/raw/c8f070e60c9a2ee75d6eb6be8d09e9a0ae6c4107/setup.rclone.plus.configs.sh" | bash
           export SizeInByte=$(rclone size --json --max-depth=1 "tdz3:/TorrentXbot/Miraculous.Tales.of.Ladybug.and.Cat.Noir.S04.DUBBED.COMPLETE.1080p.HULU.WEBRip.DDP5.1.x264-LADYBUG[rartv]/Miraculous.Tales.of.Ladybug.and.Cat.Noir.S04E01.Truth.REPACK.1080p.HULU.WEB-DL.DD5.1.H.264-LADYBUG.mkv" 2>/dev/null | jq .bytes)
-          export artchunk="$((SizeInByte/1024/1024/256))"
+          export artchunk="$((SizeInByte/1024/1024/128))"
           [[ ${artchunk} -eq 0 ]] && export artchunk="1"
           [[ ${artchunk} -gt 20 ]] && export artchunk="20"
           echo "artchunk=${artchunk}" >>$GITHUB_OUTPUT
@@ -69,7 +69,7 @@ jobs:
 
     strategy:
       fail-fast: true
-      max-parallel: 5
+      max-parallel: 8
       matrix:
         artnum: ${{fromJson(needs.one.outputs.artmatrix)}}
 
@@ -91,8 +91,15 @@ jobs:
           mediainfo ${SourceName}
           md5sum ${SourceName}
           echo -e "[i] Splitting Media"
-          split -n ${artchunk} -d ${SourceName} ${SourceName}.
+          split --verbose -n ${artchunk} -d ${SourceName} ${SourceName}.
       - name: Upload Specific Media Part as Artifact
+        continue-on-error: true
+        uses: actions/upload-artifact@v3
+        with:
+          path: ~/data/${{env.SourceName}}.${{env.artnum}}
+          retention-days: 5
+      - name: RE:Upload Specific Media Part as Artifact
+        if: failure()
         uses: actions/upload-artifact@v3
         with:
           path: ~/data/${{env.SourceName}}.${{env.artnum}}
@@ -106,7 +113,7 @@ jobs:
 
     strategy:
       fail-fast: false
-      max-parallel: 6
+      max-parallel: 12
       matrix:
         split: ${{fromJson(needs.one.outputs.matrix)}}
 
@@ -133,6 +140,12 @@ jobs:
           rm -rf ./artifact/
           mediainfo ${SourceName}
           md5sum ${SourceName}
+          set -xv
+          case "${split}" in
+            01) exit 1 ;;
+            *) exit 0 ;;
+          esac
+          set +xv
 
   three-v2:
     name: "Job Processing"
@@ -142,7 +155,7 @@ jobs:
 
     strategy:
       fail-fast: false
-      max-parallel: 6
+      max-parallel: 12
       matrix:
         split: ${{fromJson(needs.one.outputs.matrix)}}
 
@@ -169,6 +182,12 @@ jobs:
           rm -rf ./artifact/
           mediainfo ${SourceName}
           md5sum ${SourceName}
+          set -xv
+          case "${split}" in
+            01) exit 1 ;;
+            *) exit 0 ;;
+          esac
+          set +xv
 
   four:
     name: "Job Finalizing"
